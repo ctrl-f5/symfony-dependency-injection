@@ -17,6 +17,7 @@ use Symfony\Component\Config\FileLocatorInterface;
 use Symfony\Component\Config\Loader\FileLoader as BaseFileLoader;
 use Symfony\Component\Config\Loader\Loader;
 use Symfony\Component\Config\Resource\GlobResource;
+use Symfony\Component\DependencyInjection\Attribute\AsService;
 use Symfony\Component\DependencyInjection\Attribute\When;
 use Symfony\Component\DependencyInjection\ChildDefinition;
 use Symfony\Component\DependencyInjection\Compiler\RegisterAutoconfigureAttributesPass;
@@ -91,7 +92,7 @@ abstract class FileLoader extends BaseFileLoader
      * @param string               $resource  The directory to look for classes, glob-patterns allowed
      * @param string|string[]|null $exclude   A globbed path of files to exclude or an array of globbed paths of files to exclude
      */
-    public function registerClasses(Definition $prototype, string $namespace, string $resource, string|array $exclude = null)
+    public function registerClasses(Definition $prototype, string $namespace, string $resource, string|array $exclude = null, bool $registerByAttributes = false)
     {
         if (!str_ends_with($namespace, '\\')) {
             throw new InvalidArgumentException(sprintf('Namespace prefix must end with a "\\": "%s".', $namespace));
@@ -107,9 +108,26 @@ abstract class FileLoader extends BaseFileLoader
         $serializedPrototype = serialize($prototype);
 
         foreach ($classes as $class => $errorMessage) {
+            $definition = null;
             if (null === $errorMessage && $autoconfigureAttributes && $this->env) {
                 $r = $this->container->getReflectionClass($class);
                 $attribute = null;
+                $serviceAttributes = $r->getAttributes(AsService::class);
+                if ($registerByAttributes) {
+                    if (!count($serviceAttributes)) {
+                        continue;
+                    }
+                    if (count($serviceAttributes) > 1) {
+                        $errorMessage = 'A class can only have on AsService attribute';
+                    } else {
+                        $serviceAttribute = $serviceAttributes[0]->newInstance();
+                        $definition = unserialize($serializedPrototype);
+                        $definition->setPublic($serviceAttribute->public);
+                        $definition->setShared($serviceAttribute->shared);
+                        $definition->setLazy($serviceAttribute->lazy);
+                        $definition->setAutowired($serviceAttribute->autowired);
+                    }
+                }
                 foreach ($r->getAttributes(When::class) as $attribute) {
                     if ($this->env === $attribute->newInstance()->env) {
                         $attribute = null;
@@ -124,7 +142,7 @@ abstract class FileLoader extends BaseFileLoader
             if (interface_exists($class, false)) {
                 $this->interfaces[] = $class;
             } else {
-                $this->setDefinition($class, $definition = unserialize($serializedPrototype));
+                $this->setDefinition($class, $definition ?: unserialize($serializedPrototype));
                 if (null !== $errorMessage) {
                     $definition->addError($errorMessage);
 

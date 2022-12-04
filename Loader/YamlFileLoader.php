@@ -84,6 +84,7 @@ class YamlFileLoader extends FileLoader
         'autowire' => 'autowire',
         'autoconfigure' => 'autoconfigure',
         'bind' => 'bind',
+        'register_by_attributes' => 'register_by_attributes',
     ];
 
     private const INSTANCEOF_KEYWORDS = [
@@ -692,7 +693,7 @@ class YamlFileLoader extends FileLoader
             }
             $exclude = $service['exclude'] ?? null;
             $namespace = $service['namespace'] ?? $id;
-            $this->registerClasses($definition, $namespace, $service['resource'], $exclude);
+            $this->registerClasses($definition, $namespace, $service['resource'], $exclude, $service['register_by_attributes'] ?? false);
         } else {
             $this->setDefinition($id, $definition);
         }
